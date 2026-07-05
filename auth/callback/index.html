@@ -79,7 +79,7 @@
       <p id="fallback-message">Open the Capsulo app on this device to continue.</p>
       <a id="retry-btn" class="btn" href="#">Open Capsulo</a>
       <div id="copy-section" class="hidden">
-        <p class="hint">This link only works once and has already been used on this device. To finish on your phone, copy this exact page's link below and open it there — don't reuse the original email link, it's now expired.</p>
+        <p class="hint">On a different device without Capsulo installed? This link only works once — copy this page's link below (not the original email link, that one's now used up) and open it on the device that has the app.</p>
         <div class="copy-row">
           <input id="copy-input" type="text" readonly />
           <button id="copy-btn" class="copy-btn" type="button">Copy</button>
@@ -148,7 +148,7 @@
         if (type === 'recovery') {
           showFallback(
             'Password reset',
-            'Capsulo isn\'t installed on this device.',
+            'Tap below to continue in Capsulo.',
             { showCopyLink: true }
           );
         } else if (type === 'signup') {
