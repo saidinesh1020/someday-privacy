@@ -4,6 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Capsulo</title>
+  <script>
+    // Fires the app deep link as early as physically possible — before any
+    // CSS/JS loads — since Chrome only allows auto-navigating to a custom
+    // scheme within a short window tied to the user's original tap on the
+    // email link. Any delay here (e.g. waiting on the Supabase SDK CDN
+    // fetch, which used to run first) risks falling outside that window,
+    // silently failing even when the app is installed.
+    (function () {
+      var deepLink = 'com.saidinesh.someday://login-callback' + window.location.search + window.location.hash;
+      var params = new URLSearchParams(window.location.hash.slice(1));
+      if (!params.get('error')) {
+        window.location.href = deepLink;
+      }
+    })();
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -116,7 +131,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" defer></script>
   <script>
     (function () {
       var SUPABASE_URL = 'https://vzlqmvdyeaqqsaxinhyj.supabase.co';
@@ -191,7 +206,14 @@
 
       // Shows the in-browser reset form as the fallback for recovery links —
       // only reached if the app didn't intercept the deep link below in time.
+      // The SDK script is deferred (so it can't delay the deep-link attempt in
+      // <head>) — it's virtually always ready by now, but guard against a slow
+      // network still loading it.
       function showResetForm() {
+        if (!window.supabase) {
+          setTimeout(showResetForm, 100);
+          return;
+        }
         var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(function (res) {
@@ -231,13 +253,12 @@
         });
       }
 
-      // Always try the app first, on every link type — the web form/message is
-      // purely a fallback for when the app doesn't intercept this in time (not
-      // installed on this device, or the browser blocked the gesture-less
-      // custom-scheme navigation). If the app does intercept it, this tab gets
-      // backgrounded before the timeout below ever fires.
-      window.location.href = deepLink;
-
+      // The actual deep-link attempt already fired in <head>, as early as
+      // possible. Everything below is purely the fallback for when the app
+      // doesn't intercept it in time (not installed on this device, or the
+      // browser blocked the gesture-less custom-scheme navigation) — if the
+      // app does intercept it, this tab gets backgrounded before this timer
+      // ever fires.
       setTimeout(function () {
         if (type === 'recovery' && accessToken && refreshToken) {
           showResetForm();
