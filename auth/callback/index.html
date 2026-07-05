@@ -17,7 +17,7 @@
       padding: 1.5rem;
       text-align: center;
     }
-    .card { max-width: 420px; }
+    .card { max-width: 420px; width: 100%; }
     h1 { font-size: 1.4rem; margin-bottom: 0.75rem; color: #1a1a1a; }
     p { line-height: 1.6; margin-bottom: 1rem; color: #555; }
     .btn {
@@ -25,10 +25,22 @@
       background: #b07d2a;
       color: #fff;
       text-decoration: none;
+      border: none;
       padding: 0.75rem 1.5rem;
       border-radius: 8px;
       font-weight: 600;
+      font-size: 1rem;
       margin-top: 0.5rem;
+      cursor: pointer;
+      width: 100%;
+    }
+    .btn:disabled { opacity: 0.6; cursor: default; }
+    .btn-secondary {
+      background: none;
+      color: #b07d2a;
+      text-decoration: underline;
+      font-weight: 500;
+      padding: 0.5rem;
     }
     .spinner {
       width: 28px; height: 28px;
@@ -40,31 +52,28 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .hidden { display: none; }
-    .copy-row {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 1rem;
-      align-items: center;
+    .form { text-align: left; margin-top: 1rem; }
+    .field-label {
+      display: block;
+      font-size: 0.75rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #999;
+      margin-bottom: 0.3rem;
     }
-    .copy-row input {
-      flex: 1;
-      min-width: 0;
-      padding: 0.6rem 0.75rem;
+    .form-field { margin-bottom: 1rem; }
+    .sd-input {
+      width: 100%;
+      padding: 0.7rem 0.85rem;
       border: 1px solid #e0ddd8;
       border-radius: 8px;
-      font-size: 0.8rem;
-      color: #555;
+      font-size: 1rem;
+      background: #fff;
+      color: #2c2c2c;
     }
-    .copy-btn {
-      background: #eee;
-      border: 1px solid #e0ddd8;
-      border-radius: 8px;
-      padding: 0.6rem 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .hint { font-size: 0.8rem; color: #999; margin-top: 0.5rem; }
+    .sd-input:focus { outline: none; border-color: #b07d2a; }
+    .error-msg { color: #b3413a; font-size: 0.85rem; margin: -0.25rem 0 0.75rem; text-align: left; }
+    .success-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
   </style>
 </head>
 <body>
@@ -74,59 +83,74 @@
       <p>Opening Capsulo&hellip;</p>
     </div>
 
+    <!-- Signup confirmation / generic fallback -->
     <div id="fallback" class="hidden">
       <h1 id="fallback-title">Almost there</h1>
       <p id="fallback-message">Open the Capsulo app on this device to continue.</p>
       <a id="retry-btn" class="btn" href="#">Open Capsulo</a>
-      <div id="copy-section" class="hidden">
-        <p class="hint">On a different device without Capsulo installed? This link only works once — copy this page's link below (not the original email link, that one's now used up) and open it on the device that has the app.</p>
-        <div class="copy-row">
-          <input id="copy-input" type="text" readonly />
-          <button id="copy-btn" class="copy-btn" type="button">Copy</button>
+    </div>
+
+    <!-- Password reset form (recovery type) -->
+    <div id="reset-form" class="hidden">
+      <h1>Set new password</h1>
+      <p>Choose a new password for your Capsulo account.</p>
+      <div class="form">
+        <div class="form-field">
+          <label class="field-label">New password</label>
+          <input id="new-password" class="sd-input" type="password" autocomplete="new-password" placeholder="At least 6 characters" />
         </div>
+        <div class="form-field">
+          <label class="field-label">Confirm password</label>
+          <input id="confirm-password" class="sd-input" type="password" autocomplete="new-password" placeholder="Repeat your password" />
+        </div>
+        <p id="reset-error" class="error-msg hidden"></p>
+        <button id="reset-submit" class="btn" type="button">Update password</button>
+        <button id="reset-open-app" class="btn btn-secondary" type="button">Prefer the app? Open Capsulo instead</button>
       </div>
+    </div>
+
+    <div id="reset-success" class="hidden">
+      <div class="success-icon">✓</div>
+      <h1>Password updated</h1>
+      <p>You can now sign in with your new password in the Capsulo app.</p>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script>
     (function () {
+      var SUPABASE_URL = 'https://vzlqmvdyeaqqsaxinhyj.supabase.co';
+      var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6bHFtdmR5ZWFxcXNheGluaHlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNDAyOTcsImV4cCI6MjA5NjgxNjI5N30.OLXHvn--TYbr0UbYntRNJzGd6mbuURrOrxmtfzpHlRk';
       var APP_SCHEME = 'com.saidinesh.someday://login-callback';
+
       var hash = window.location.hash;   // #access_token=...&refresh_token=...&type=...
       var search = window.location.search; // ?code=... (PKCE flow)
       var deepLink = APP_SCHEME + search + hash;
 
       var params = new URLSearchParams(hash.slice(1));
       var type = params.get('type');
+      var accessToken = params.get('access_token');
+      var refreshToken = params.get('refresh_token');
       var errorCode = params.get('error_code');
       var fragmentError = params.get('error');
 
-      function showFallback(title, message, opts) {
-        opts = opts || {};
-        document.getElementById('loading').classList.add('hidden');
+      function show(id) {
+        ['loading', 'fallback', 'reset-form', 'reset-success'].forEach(function (el) {
+          document.getElementById(el).classList.toggle('hidden', el !== id);
+        });
+      }
+
+      function showFallback(title, message) {
+        show('fallback');
         document.getElementById('fallback-title').textContent = title;
         document.getElementById('fallback-message').textContent = message;
-        document.getElementById('fallback').classList.remove('hidden');
-
-        // For recovery, the one-time token was already consumed by the redirect
-        // that landed us here — the *original email link* is now dead. What's
-        // still valid is this page's own URL (the fragment holds live session
-        // tokens), so offer that to copy across to the device with the app.
-        if (opts.showCopyLink) {
-          document.getElementById('copy-section').classList.remove('hidden');
-          var input = document.getElementById('copy-input');
-          input.value = window.location.href;
-          document.getElementById('copy-btn').addEventListener('click', function () {
-            input.select();
-            input.setSelectionRange(0, 99999);
-            navigator.clipboard && navigator.clipboard.writeText(input.value).catch(function () {
-              document.execCommand('copy');
-            });
-          });
-        }
       }
 
       document.getElementById('retry-btn').addEventListener('click', function (e) {
         e.preventDefault();
+        window.location.href = deepLink;
+      });
+      document.getElementById('reset-open-app').addEventListener('click', function () {
         window.location.href = deepLink;
       });
 
@@ -140,18 +164,79 @@
         return;
       }
 
-      // Attempt the deep link immediately. If the app handles it, this page
-      // is backgrounded/closed before the fallback timer below ever fires.
+      // ── Password reset: handle entirely on this page, no app needed ──
+      if (type === 'recovery' && accessToken && refreshToken) {
+        var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(function (res) {
+          if (res.error) {
+            showFallback('Link expired', 'This reset link is no longer valid. Open Capsulo and request a new one.');
+            return;
+          }
+          show('reset-form');
+        });
+
+        function toUserMessage(error) {
+          var msg = (error && error.message) || '';
+          var code = (error && error.code) || '';
+          if (code === 'same_password' || msg.indexOf('different from the old password') !== -1) {
+            return 'Your new password must be different from your current one.';
+          }
+          if (code === 'weak_password' || msg.indexOf('Password should be') !== -1) {
+            return 'Password must be at least 6 characters.';
+          }
+          if (code === 'session_not_found' || msg.indexOf('session_not_found') !== -1) {
+            return 'Your session has expired. Open Capsulo and request a new reset link.';
+          }
+          return 'Something went wrong. Please try again.';
+        }
+
+        function setError(msg) {
+          var el = document.getElementById('reset-error');
+          if (msg) {
+            el.textContent = msg;
+            el.classList.remove('hidden');
+          } else {
+            el.classList.add('hidden');
+          }
+        }
+
+        document.getElementById('reset-submit').addEventListener('click', function () {
+          var newPassword = document.getElementById('new-password').value;
+          var confirmPassword = document.getElementById('confirm-password').value;
+          setError('');
+
+          if (!newPassword || !confirmPassword) { setError('Please fill in both fields.'); return; }
+          if (newPassword.length < 6) { setError('Password must be at least 6 characters.'); return; }
+          if (newPassword !== confirmPassword) { setError('Passwords do not match.'); return; }
+
+          var btn = document.getElementById('reset-submit');
+          btn.disabled = true;
+          btn.textContent = 'Updating…';
+
+          supabase.auth.updateUser({ password: newPassword }).then(function (res) {
+            btn.disabled = false;
+            btn.textContent = 'Update password';
+            if (res.error) {
+              setError(toUserMessage(res.error));
+              return;
+            }
+            show('reset-success');
+          }).catch(function () {
+            btn.disabled = false;
+            btn.textContent = 'Update password';
+            setError('Something went wrong. Please try again.');
+          });
+        });
+
+        return;
+      }
+
+      // ── Signup confirmation (and anything else): still hand off to the app ──
       window.location.href = deepLink;
 
       setTimeout(function () {
-        if (type === 'recovery') {
-          showFallback(
-            'Password reset',
-            'Tap below to continue in Capsulo.',
-            { showCopyLink: true }
-          );
-        } else if (type === 'signup') {
+        if (type === 'signup') {
           showFallback(
             'Email confirmed',
             'Your email is confirmed. Open the Capsulo app on your phone to continue.'
