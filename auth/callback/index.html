@@ -40,6 +40,31 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .hidden { display: none; }
+    .copy-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      align-items: center;
+    }
+    .copy-row input {
+      flex: 1;
+      min-width: 0;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid #e0ddd8;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: #555;
+    }
+    .copy-btn {
+      background: #eee;
+      border: 1px solid #e0ddd8;
+      border-radius: 8px;
+      padding: 0.6rem 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .hint { font-size: 0.8rem; color: #999; margin-top: 0.5rem; }
   </style>
 </head>
 <body>
@@ -53,6 +78,13 @@
       <h1 id="fallback-title">Almost there</h1>
       <p id="fallback-message">Open the Capsulo app on this device to continue.</p>
       <a id="retry-btn" class="btn" href="#">Open Capsulo</a>
+      <div id="copy-section" class="hidden">
+        <p class="hint">This link only works once and has already been used on this device. To finish on your phone, copy this exact page's link below and open it there — don't reuse the original email link, it's now expired.</p>
+        <div class="copy-row">
+          <input id="copy-input" type="text" readonly />
+          <button id="copy-btn" class="copy-btn" type="button">Copy</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -68,11 +100,29 @@
       var errorCode = params.get('error_code');
       var fragmentError = params.get('error');
 
-      function showFallback(title, message) {
+      function showFallback(title, message, opts) {
+        opts = opts || {};
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('fallback-title').textContent = title;
         document.getElementById('fallback-message').textContent = message;
         document.getElementById('fallback').classList.remove('hidden');
+
+        // For recovery, the one-time token was already consumed by the redirect
+        // that landed us here — the *original email link* is now dead. What's
+        // still valid is this page's own URL (the fragment holds live session
+        // tokens), so offer that to copy across to the device with the app.
+        if (opts.showCopyLink) {
+          document.getElementById('copy-section').classList.remove('hidden');
+          var input = document.getElementById('copy-input');
+          input.value = window.location.href;
+          document.getElementById('copy-btn').addEventListener('click', function () {
+            input.select();
+            input.setSelectionRange(0, 99999);
+            navigator.clipboard && navigator.clipboard.writeText(input.value).catch(function () {
+              document.execCommand('copy');
+            });
+          });
+        }
       }
 
       document.getElementById('retry-btn').addEventListener('click', function (e) {
@@ -98,7 +148,8 @@
         if (type === 'recovery') {
           showFallback(
             'Password reset',
-            'To finish resetting your password, open this same link on the phone where Capsulo is installed.'
+            'Capsulo isn\'t installed on this device.',
+            { showCopyLink: true }
           );
         } else if (type === 'signup') {
           showFallback(
