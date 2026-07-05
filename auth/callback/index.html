@@ -200,6 +200,9 @@
       function toUserMessage(error) {
         var msg = (error && error.message) || '';
         var code = (error && error.code) || '';
+        if (msg.toLowerCase().indexOf('fetch') !== -1 || msg.toLowerCase().indexOf('network') !== -1) {
+          return 'No connection. Check your internet and try again.';
+        }
         if (code === 'same_password' || msg.indexOf('different from the old password') !== -1) {
           return 'Your new password must be different from your current one.';
         }
@@ -226,10 +229,16 @@
       // only reached if the app didn't intercept the deep link below in time.
       // The SDK script is deferred (so it can't delay the deep-link attempt in
       // <head>) — it's virtually always ready by now, but guard against a slow
-      // network still loading it.
-      function showResetForm() {
+      // network still loading it. Capped instead of polling forever, in case
+      // the script fails to load at all (ad-blocker, offline, CDN down).
+      function showResetForm(attempt) {
+        attempt = attempt || 0;
         if (!window.supabase) {
-          setTimeout(showResetForm, 100);
+          if (attempt >= 50) {
+            showFallback('Something went wrong', 'Could not load the reset page. Check your internet and try opening the link again.');
+            return;
+          }
+          setTimeout(function () { showResetForm(attempt + 1); }, 100);
           return;
         }
         var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -240,6 +249,11 @@
             return;
           }
           show('reset-form');
+        }).catch(function (err) {
+          // Without this, a dropped connection at this exact moment leaves the
+          // user stuck on the "Opening Capsulo…" spinner forever with no error
+          // and no way out.
+          showFallback('Something went wrong', toUserMessage(err));
         });
 
         document.getElementById('reset-submit').addEventListener('click', function () {
@@ -263,10 +277,10 @@
               return;
             }
             show('reset-success');
-          }).catch(function () {
+          }).catch(function (err) {
             btn.disabled = false;
             btn.textContent = 'Update password';
-            setError('Something went wrong. Please try again.');
+            setError(toUserMessage(err));
           });
         });
       }
