@@ -11,7 +11,17 @@
     // email link. Any delay here (e.g. waiting on the Supabase SDK CDN
     // fetch, which used to run first) risks falling outside that window,
     // silently failing even when the app is installed.
+    //
+    // Capsulo has no iOS app (Android-only, com.saidinesh.someday:// has no
+    // handler on iOS) — attempting this navigation on iOS Safari before the
+    // page has painted anything causes a blank page (WebKit gets stuck on
+    // the failed scheme navigation instead of rendering the fallback UI).
+    // Skip it there entirely; the body script below shows the fallback
+    // immediately since there's no app to wait for anyway.
     (function () {
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) return;
+
       var deepLink = 'com.saidinesh.someday://login-callback' + window.location.search + window.location.hash;
       var params = new URLSearchParams(window.location.hash.slice(1));
       if (!params.get('error')) {
@@ -148,6 +158,7 @@
       var refreshToken = params.get('refresh_token');
       var errorCode = params.get('error_code');
       var fragmentError = params.get('error');
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
       function show(id) {
         ['loading', 'fallback', 'reset-form', 'reset-success'].forEach(function (el) {
@@ -161,13 +172,20 @@
         document.getElementById('fallback-message').textContent = message;
       }
 
-      document.getElementById('retry-btn').addEventListener('click', function (e) {
-        e.preventDefault();
-        window.location.href = deepLink;
-      });
-      document.getElementById('reset-open-app').addEventListener('click', function () {
-        window.location.href = deepLink;
-      });
+      // No iOS app exists yet, so an "open the app" button has nothing to do
+      // there — hide it rather than show a dead control.
+      if (isIOS) {
+        document.getElementById('retry-btn').classList.add('hidden');
+        document.getElementById('reset-open-app').classList.add('hidden');
+      } else {
+        document.getElementById('retry-btn').addEventListener('click', function (e) {
+          e.preventDefault();
+          window.location.href = deepLink;
+        });
+        document.getElementById('reset-open-app').addEventListener('click', function () {
+          window.location.href = deepLink;
+        });
+      }
 
       if (fragmentError) {
         showFallback(
@@ -265,15 +283,19 @@
         } else if (type === 'signup') {
           showFallback(
             'Email confirmed',
-            'Your email is confirmed. Open the Capsulo app on your phone to continue.'
+            isIOS
+              ? 'Your email is confirmed. Capsulo is on Android for now — open the app on your Android device to continue.'
+              : 'Your email is confirmed. Open the Capsulo app on your phone to continue.'
           );
         } else {
           showFallback(
             'Continue in Capsulo',
-            'Open the Capsulo app on your phone to continue.'
+            isIOS
+              ? 'Capsulo is on Android for now — open the app on your Android device to continue.'
+              : 'Open the Capsulo app on your phone to continue.'
           );
         }
-      }, 1500);
+      }, isIOS ? 0 : 1500);
     })();
   </script>
 </body>
