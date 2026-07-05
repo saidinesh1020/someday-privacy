@@ -164,8 +164,34 @@
         return;
       }
 
-      // ── Password reset: handle entirely on this page, no app needed ──
-      if (type === 'recovery' && accessToken && refreshToken) {
+      function toUserMessage(error) {
+        var msg = (error && error.message) || '';
+        var code = (error && error.code) || '';
+        if (code === 'same_password' || msg.indexOf('different from the old password') !== -1) {
+          return 'Your new password must be different from your current one.';
+        }
+        if (code === 'weak_password' || msg.indexOf('Password should be') !== -1) {
+          return 'Password must be at least 6 characters.';
+        }
+        if (code === 'session_not_found' || msg.indexOf('session_not_found') !== -1) {
+          return 'Your session has expired. Open Capsulo and request a new reset link.';
+        }
+        return 'Something went wrong. Please try again.';
+      }
+
+      function setError(msg) {
+        var el = document.getElementById('reset-error');
+        if (msg) {
+          el.textContent = msg;
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
+      }
+
+      // Shows the in-browser reset form as the fallback for recovery links —
+      // only reached if the app didn't intercept the deep link below in time.
+      function showResetForm() {
         var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(function (res) {
@@ -175,31 +201,6 @@
           }
           show('reset-form');
         });
-
-        function toUserMessage(error) {
-          var msg = (error && error.message) || '';
-          var code = (error && error.code) || '';
-          if (code === 'same_password' || msg.indexOf('different from the old password') !== -1) {
-            return 'Your new password must be different from your current one.';
-          }
-          if (code === 'weak_password' || msg.indexOf('Password should be') !== -1) {
-            return 'Password must be at least 6 characters.';
-          }
-          if (code === 'session_not_found' || msg.indexOf('session_not_found') !== -1) {
-            return 'Your session has expired. Open Capsulo and request a new reset link.';
-          }
-          return 'Something went wrong. Please try again.';
-        }
-
-        function setError(msg) {
-          var el = document.getElementById('reset-error');
-          if (msg) {
-            el.textContent = msg;
-            el.classList.remove('hidden');
-          } else {
-            el.classList.add('hidden');
-          }
-        }
 
         document.getElementById('reset-submit').addEventListener('click', function () {
           var newPassword = document.getElementById('new-password').value;
@@ -228,15 +229,19 @@
             setError('Something went wrong. Please try again.');
           });
         });
-
-        return;
       }
 
-      // ── Signup confirmation (and anything else): still hand off to the app ──
+      // Always try the app first, on every link type — the web form/message is
+      // purely a fallback for when the app doesn't intercept this in time (not
+      // installed on this device, or the browser blocked the gesture-less
+      // custom-scheme navigation). If the app does intercept it, this tab gets
+      // backgrounded before the timeout below ever fires.
       window.location.href = deepLink;
 
       setTimeout(function () {
-        if (type === 'signup') {
+        if (type === 'recovery' && accessToken && refreshToken) {
+          showResetForm();
+        } else if (type === 'signup') {
           showFallback(
             'Email confirmed',
             'Your email is confirmed. Open the Capsulo app on your phone to continue.'
